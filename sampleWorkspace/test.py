@@ -1,8 +1,8 @@
 from goet.tracer.sql import SqlTracer
 from goet.lib.db.sqlite import connection
 
-# comment
-# comment
+
+
 class A:
     def __init__(self, x):
         self.x = x
