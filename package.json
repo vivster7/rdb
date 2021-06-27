@@ -31,12 +31,13 @@
     "package-ext": "webpack --mode production --config ./build/extension.webpack.config.js"
   },
   "dependencies": {
+    "@types/sqlite3": "^3.1.7",
     "await-notify": "1.0.1",
-    "sqlite3": "5.0.2",
+    "sqlite": "^4.0.23",
+    "sqlite3": "^5.0.2",
     "vscode-debugadapter": "^1.47.0"
   },
   "devDependencies": {
-    "@types/sqlite3": "^3.1.7",
     "@types/glob": "^7.1.3",
     "@types/mocha": "^8.2.2",
     "@types/node": "^14.14.37",

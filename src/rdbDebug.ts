@@ -352,12 +352,13 @@ export class RDBDebugSession extends LoggingDebugSession {
     response: DebugProtocol.StackTraceResponse,
     args: DebugProtocol.StackTraceArguments
   ): Promise<void> {
-    const startFrame =
-      typeof args.startFrame === "number" ? args.startFrame : 0;
-    const maxLevels = typeof args.levels === "number" ? args.levels : 1000;
-    const endFrame = startFrame + maxLevels;
+    // const startFrame =
+    //   typeof args.startFrame === "number" ? args.startFrame : 0;
+    // const maxLevels = typeof args.levels === "number" ? args.levels : 1000;
+    // const endFrame = startFrame + maxLevels;
+    // const stk = await this._runtime.stack(startFrame, endFrame);
 
-    const stk = this._runtime.stack(startFrame, endFrame);
+    const stk = await this._runtime.stack2();
 
     response.body = {
       stackFrames: stk.frames.map((f) => {
@@ -365,6 +366,7 @@ export class RDBDebugSession extends LoggingDebugSession {
           f.index,
           f.name,
           this.createSource(f.file),
+          // f.line
           this.convertDebuggerLineToClient(f.line)
         );
         if (typeof f.column === "number") {
@@ -758,6 +760,7 @@ export class RDBDebugSession extends LoggingDebugSession {
   private createSource(filePath: string): Source {
     return new Source(
       basename(filePath),
+      // filePath,
       this.convertDebuggerPathToClient(filePath),
       undefined,
       undefined,

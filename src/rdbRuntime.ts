@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
-import { Database } from "sqlite3";
-import { OutputEvent } from "vscode-debugadapter";
+import { Database as sql3Driver } from "sqlite3";
+import { Database, open } from "sqlite";
 
 export interface FileAccessor {
   readFile(path: string): Promise<string>;
@@ -48,6 +48,15 @@ class GoetFrame {
       row.f_lineno
     );
   }
+
+  toStackFrame(): IStackFrame {
+    return {
+      index: this.fId,
+      name: `${this.fId}(${this.fId})(${this.fLineno})`,
+      file: "/Users/vivek.dasari/Code/rdb/sampleWorkspace/test.py",
+      line: this.fLineno,
+    };
+  }
 }
 
 /**
@@ -82,7 +91,7 @@ export class RDBRuntime extends EventEmitter {
   private _otherExceptions = false;
 
   // TODO: figure out where to initialize this.
-  private _db: Database = new Database("test.rdb.sqlite3");
+  private _db: Database = null as unknown as Database;
   private _frame: GoetFrame | undefined;
   private _lastFId = 0;
 
@@ -100,13 +109,13 @@ export class RDBRuntime extends EventEmitter {
   ): Promise<void> {
     this._noDebug = noDebug;
 
-    this._db = new Database("test.rdb.sqlite3");
-    this._db.get("select max(f_id) from frames", (err, row) => {
-      if (err) {
-        this.sendEvent("rawEvent", new OutputEvent(err.message, "stderr", err));
-      }
-      this._lastFId = row["max(f_id)"];
+    this._db = await open({
+      filename: "/Users/vivek.dasari/Code/rdb/test.rdb.sqlite3",
+      driver: sql3Driver,
     });
+
+    const row = await this._db.get("select max(f_id) from frames");
+    this._lastFId = row["max(f_id)"];
 
     await this.loadSource(program);
     this._currentLine = -1;
@@ -130,29 +139,19 @@ export class RDBRuntime extends EventEmitter {
     this.reverseRun(undefined);
   }
 
-  public jumpToFrame(frameId: number) {
+  private async jumpToFrame(frameId: number): Promise<void> {
     console.log(this._frame);
     // Cannot jump past last frame
-    const fId = Math.min(this._lastFId, frameId);
-    // if (fId >= this._lastFId) {
-    //   // no more lines: run to end
-    //   this.sendEvent("end");
-    //   return;
-    // }
+    const fId = Math.min(this._lastFId + 1, frameId);
+    if (fId > this._lastFId) {
+      // no more lines: run to end
+      this.sendEvent("end");
+      return;
+    }
 
-    this._db.get(
-      "select * from frames where f_id = $fId",
-      { $fId: fId },
-      (err, row) => {
-        if (err) {
-          this.sendEvent(
-            "rawEvent",
-            new OutputEvent(err.message, "stderr", err)
-          );
-        }
-        this._frame = GoetFrame.fromRow(row);
-      }
-    );
+    const sql = `select * from frames where f_id = $fId`;
+    const row = await this._db.get(sql, { $fId: fId });
+    this._frame = GoetFrame.fromRow(row);
   }
 
   public step(event = "stopOnStep") {
@@ -241,34 +240,37 @@ export class RDBRuntime extends EventEmitter {
     });
   }
 
+  public async stack2(): Promise<IStack> {
+    if (!this._frame) {
+      return { frames: [], count: 0 };
+    }
+
+    const stacktraceSql = `
+    WITH RECURSIVE
+    stacktrace(f) AS (
+        VALUES($fBackId)
+        UNION ALL
+        SELECT f_back_id FROM frames, stacktrace
+        WHERE frames.f_id = stacktrace.f
+    )
+    SELECT * FROM frames
+    WHERE f_id IN stacktrace
+    ORDER BY f_back_ID DESC;`;
+
+    const rows = await this._db.all(stacktraceSql, {
+      $fBackId: this._frame.fBackId,
+    });
+    const frames = [this._frame, ...rows.map(GoetFrame.fromRow)];
+    return {
+      frames: frames.map((f) => f.toStackFrame()),
+      count: frames.length,
+    };
+  }
+
   /**
    * Returns a stacktrace, starting at `this._frame`
    */
-  public stack(startFrame: number, endFrame: number): IStack {
-    // if (!this._frame) {
-    //   return { frames: [], count: 0 };
-    // }
-
-    // const stacktraceSql = `
-    // WITH RECURSIVE
-    // stacktrace(f) AS (
-    //     VALUES($fBackId)
-    //     UNION ALL
-    //     SELECT f_back_id FROM frames, stacktrace
-    //     WHERE frames.f_id = stacktrace.f
-    // )
-    // SELECT * FROM frames
-    // WHERE f_id IN stacktrace;`;
-
-    // this._db.all(
-    //   stacktraceSql,
-    //   { $fBackId: this._frame.fBackId },
-    //   (err, rows) => {
-    //     const frames = rows.map(GoetFrame.fromRow);
-    //     return frames;
-    //   }
-    // );
-
+  public async stack(startFrame: number, endFrame: number): Promise<IStack> {
     const words = this._sourceLines[this._currentLine].trim().split(/\s+/);
 
     const frames = new Array<IStackFrame>();
