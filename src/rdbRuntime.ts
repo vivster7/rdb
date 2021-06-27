@@ -13,11 +13,6 @@ export interface IRDBBreakpoint {
   verified: boolean;
 }
 
-interface IStepInTargets {
-  id: number;
-  label: string;
-}
-
 interface IStackFrame {
   index: number;
   name: string;
@@ -127,7 +122,7 @@ export class RDBRuntime extends EventEmitter {
 
     if (stopOnEntry) {
       // we step once
-      this.step("stopOnEntry");
+      await this.step();
     } else {
       // we just start to run until we hit a breakpoint or an exception
       this.continue();
@@ -143,20 +138,85 @@ export class RDBRuntime extends EventEmitter {
   }
 
   private async jumpToFrame(frameId: number): Promise<void> {
-    console.log(this._frame);
     // Cannot jump past last frame
     const fId = Math.min(this._lastFId + 1, frameId);
     if (fId > this._lastFId) {
-      // no more lines: run to end
       return;
     }
 
-    const sql = `select * from frames where f_id = $fId`;
-    const row = await this._db.get(sql, { $fId: fId });
+    const getFrameByIdSql = `select * from frames where f_id = $fId`;
+    const row = await this._db.get(getFrameByIdSql, { $fId: fId });
     this._frame = GoetFrame.fromRow(row);
   }
 
-  public step(event = "stopOnStep") {
+  public async step() {
+    // Handle first step
+    if (!this._frame) {
+      await this.jumpToFrame(1);
+      this.sendEvent("stopOnStep");
+      return;
+    }
+
+    const getNextFrameIdByStepSql = `
+      SELECT f_id FROM frames
+      WHERE f_id > $fId AND f_back_id <= $fBackId
+      ORDER BY f_id
+      LIMIT 1
+    `;
+
+    const row = await this._db.get(getNextFrameIdByStepSql, {
+      $fId: this._frame.fId,
+      $fBackId: this._frame.fBackId,
+    });
+
+    // End session if theres no next row.
+    if (row === undefined) {
+      this.sendEvent("end");
+      return;
+    }
+
+    await this.jumpToFrame(row.f_id);
+    this.sendEvent("stopOnStep");
+    return;
+  }
+
+  public async stepBack(event = "stopOnStep"): Promise<void> {
+    // Cannot step back from first frame.
+    if (!this._frame || this._frame.fId === 1) {
+      return;
+    }
+
+    const getPrevFrameIdByStepSql = `
+      SELECT f_id FROM frames
+      WHERE f_id < $fId AND f_back_id <= $fBackId
+      ORDER BY f_id DESC
+      LIMIT 1
+    `;
+
+    const row = await this._db.get(getPrevFrameIdByStepSql, {
+      $fId: this._frame.fId,
+      $fBackId: this._frame.fBackId,
+    });
+
+    // Cannot step back from first frame.
+    if (row === undefined) {
+      console.error(
+        "Expected fn to early exit before trying to run `stepBack` on first frame."
+      );
+      return;
+    }
+
+    await this.jumpToFrame(row.f_id);
+    this.sendEvent("stopOnStep");
+
+    // this.reverseRun(event);
+    return;
+  }
+
+  /**
+   * "Step into" for RDB debug means: go to next character
+   */
+  public async stepIn() {
     // Stepping past last frame ends the debugging session.
     if (this._frame?.fId === this._lastFId) {
       this.sendEvent("end");
@@ -164,44 +224,8 @@ export class RDBRuntime extends EventEmitter {
     }
 
     const fId = (this._frame?.fId ?? 0) + 1;
-    this.jumpToFrame(fId);
+    await this.jumpToFrame(fId);
     this.sendEvent("stopOnStep");
-
-    this.run(event);
-  }
-
-  public stepBack(event = "stopOnStep") {
-    // Cannot step back from first frame.
-    if (!this._frame || this._frame.fId === 1) {
-      return;
-    }
-
-    const fId = this._frame.fId - 1;
-    this.jumpToFrame(fId);
-    this.sendEvent("stopOnStep");
-
-    this.reverseRun(event);
-  }
-
-  /**
-   * "Step into" for RDB debug means: go to next character
-   */
-  public stepIn(targetId: number | undefined) {
-    if (typeof targetId === "number") {
-      this._currentColumn = targetId;
-      this.sendEvent("stopOnStep");
-    } else {
-      if (typeof this._currentColumn === "number") {
-        if (
-          this._currentColumn <= this._sourceLines[this._currentLine].length
-        ) {
-          this._currentColumn += 1;
-        }
-      } else {
-        this._currentColumn = 1;
-      }
-      this.sendEvent("stopOnStep");
-    }
   }
 
   /**
@@ -217,30 +241,6 @@ export class RDBRuntime extends EventEmitter {
     this.sendEvent("stopOnStep");
   }
 
-  public getStepInTargets(frameId: number): IStepInTargets[] {
-    const line = this._sourceLines[this._currentLine].trim();
-
-    // every word of the current line becomes a stack frame.
-    const words = line.split(/\s+/);
-
-    // return nothing if frameId is out of range
-    if (frameId < 0 || frameId >= words.length) {
-      return [];
-    }
-
-    // pick the frame for the given frameId
-    const frame = words[frameId];
-
-    const pos = line.indexOf(frame);
-
-    // make every character of the frame a potential "step in" target
-    return frame.split("").map((c, ix) => {
-      return {
-        id: pos + ix,
-        label: `target: ${c}`,
-      };
-    });
-  }
 
   private isObjectOrArrayWithContent(item) {
     return (

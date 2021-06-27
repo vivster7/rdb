@@ -165,7 +165,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     response.body.supportsBreakpointLocationsRequest = true;
 
     // make VS Code provide "Step in Target" functionality
-    response.body.supportsStepInTargetsRequest = true;
+    response.body.supportsStepInTargetsRequest = false;
 
     // the adapter defines two exceptions filters, one with support for conditions.
     response.body.supportsExceptionFilterOptions = true;
@@ -401,7 +401,6 @@ export class RDBDebugSession extends LoggingDebugSession {
     args: DebugProtocol.VariablesArguments,
     request?: DebugProtocol.Request
   ) {
-
     response.body = {
       variables: await this._runtime.variables(args.variablesReference),
     };
@@ -424,32 +423,19 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.sendResponse(response);
   }
 
-  protected nextRequest(
+  protected async nextRequest(
     response: DebugProtocol.NextResponse,
     args: DebugProtocol.NextArguments
-  ): void {
-    this._runtime.step();
+  ): Promise<void> {
+    await this._runtime.step();
     this.sendResponse(response);
   }
 
-  protected stepBackRequest(
+  protected async stepBackRequest(
     response: DebugProtocol.StepBackResponse,
     args: DebugProtocol.StepBackArguments
-  ): void {
-    this._runtime.stepBack();
-    this.sendResponse(response);
-  }
-
-  protected stepInTargetsRequest(
-    response: DebugProtocol.StepInTargetsResponse,
-    args: DebugProtocol.StepInTargetsArguments
-  ) {
-    const targets = this._runtime.getStepInTargets(args.frameId);
-    response.body = {
-      targets: targets.map((t) => {
-        return { id: t.id, label: t.label };
-      }),
-    };
+  ): Promise<void> {
+    await this._runtime.stepBack();
     this.sendResponse(response);
   }
 
@@ -457,7 +443,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     response: DebugProtocol.StepInResponse,
     args: DebugProtocol.StepInArguments
   ): void {
-    this._runtime.stepIn(args.targetId);
+    this._runtime.stepIn();
     this.sendResponse(response);
   }
 
