@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import { Database as sql3Driver } from "sqlite3";
 import { Database, open } from "sqlite";
+import { Handles, Scope, Variable } from "vscode-debugadapter";
 
 export interface FileAccessor {
   readFile(path: string): Promise<string>;
@@ -94,6 +95,8 @@ export class RDBRuntime extends EventEmitter {
   private _db: Database = null as unknown as Database;
   private _frame: GoetFrame | undefined;
   private _lastFId = 0;
+
+  private _variableHandles = new Handles<string>();
 
   constructor(private _fileAccessor: FileAccessor) {
     super();
@@ -237,6 +240,45 @@ export class RDBRuntime extends EventEmitter {
         id: pos + ix,
         label: `target: ${c}`,
       };
+    });
+  }
+
+  private isObjectOrArrayWithContent(item) {
+    return (
+      typeof item === "object" && item !== null && Object.keys(item).length > 0
+    );
+  }
+
+  public async scopes(frameId: number): Promise<Scope[]> {
+    const getFrameByIdSql = `
+    SELECT * FROM frames
+    WHERE f_id = $fId`;
+
+    const row = await this._db.get(getFrameByIdSql, {
+      $fId: frameId,
+    });
+    const frame = GoetFrame.fromRow(row);
+    return [
+      new Scope(
+        `frame_${frame.fId}_locals`,
+        this._variableHandles.create(JSON.stringify(frame.fLocals))
+      ),
+    ];
+  }
+
+  public async variables(variablesReference: number): Promise<Variable[]> {
+    const variablesJson = this._variableHandles.get(variablesReference);
+    if (!variablesJson) {
+      return [];
+    }
+
+    const variables = JSON.parse(variablesJson);
+
+    return Object.entries(variables).map(([key, val]) => {
+      const ref = this.isObjectOrArrayWithContent(val)
+        ? this._variableHandles.create(JSON.stringify(val))
+        : 0;
+      return new Variable(key, JSON.stringify(val), ref);
     });
   }
 

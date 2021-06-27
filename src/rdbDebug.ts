@@ -12,7 +12,6 @@ import {
   ProgressEndEvent,
   Thread,
   StackFrame,
-  Scope,
   Source,
   Handles,
   Breakpoint,
@@ -55,7 +54,7 @@ export class RDBDebugSession extends LoggingDebugSession {
   private _configurationDone = new Subject();
 
   private _cancelationTokens = new Map<number, boolean>();
-  private _isLongrunning = new Map<number, boolean>();
+  // private _isLongrunning = new Map<number, boolean>();
 
   private _reportProgress = false;
   private _progressId = 10000;
@@ -382,15 +381,17 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.sendResponse(response);
   }
 
-  protected scopesRequest(
+  protected async scopesRequest(
     response: DebugProtocol.ScopesResponse,
     args: DebugProtocol.ScopesArguments
-  ): void {
+  ): Promise<void> {
+    // this._runtime.scopes(args)
     response.body = {
-      scopes: [
-        new Scope("Local", this._variableHandles.create("local"), false),
-        new Scope("Global", this._variableHandles.create("global"), true),
-      ],
+      scopes: await this._runtime.scopes(args.frameId),
+      // [
+      //   new Scope("Local", this._variableHandles.create("local"), false),
+      //   // new Scope("Global", this._variableHandles.create("global"), true),
+      // ],
     };
     this.sendResponse(response);
   }
@@ -400,90 +401,9 @@ export class RDBDebugSession extends LoggingDebugSession {
     args: DebugProtocol.VariablesArguments,
     request?: DebugProtocol.Request
   ) {
-    const variables: DebugProtocol.Variable[] = [];
-
-    if (this._isLongrunning.get(args.variablesReference)) {
-      // long running
-
-      if (request) {
-        this._cancelationTokens.set(request.seq, false);
-      }
-
-      for (let i = 0; i < 100; i++) {
-        await timeout(1000);
-        variables.push({
-          name: `i_${i}`,
-          type: "integer",
-          value: `${i}`,
-          variablesReference: 0,
-        });
-        if (request && this._cancelationTokens.get(request.seq)) {
-          break;
-        }
-      }
-
-      if (request) {
-        this._cancelationTokens.delete(request.seq);
-      }
-    } else {
-      const id = this._variableHandles.get(args.variablesReference);
-
-      if (id) {
-        const i = 12345678;
-        variables.push({
-          name: id + "_i",
-          type: "integer",
-          value: i.toString(10),
-          // eslint-disable-next-line @typescript-eslint/naming-convention
-          __vscodeVariableMenuContext: "simple",
-          variablesReference: 0,
-        } as DebugProtocol.Variable);
-        variables.push({
-          name: id + "_f",
-          type: "float",
-          value: "3.14",
-          variablesReference: 0,
-        });
-        variables.push({
-          name: id + "_f",
-          type: "float",
-          value: "6.28",
-          variablesReference: 0,
-        });
-        variables.push({
-          name: id + "_f",
-          type: "float",
-          value: "6.28",
-          variablesReference: 0,
-        });
-        variables.push({
-          name: id + "_s",
-          type: "string",
-          value: "hello world",
-          variablesReference: 0,
-        });
-        variables.push({
-          name: id + "_o",
-          type: "object",
-          value: "Object",
-          variablesReference: this._variableHandles.create(id + "_o"),
-        });
-
-        // cancellation support for long running requests
-        const nm = id + "_long_running";
-        const ref = this._variableHandles.create(id + "_lr");
-        variables.push({
-          name: nm,
-          type: "object",
-          value: "Object",
-          variablesReference: ref,
-        });
-        this._isLongrunning.set(ref, true);
-      }
-    }
 
     response.body = {
-      variables: variables,
+      variables: await this._runtime.variables(args.variablesReference),
     };
     this.sendResponse(response);
   }
