@@ -148,7 +148,6 @@ export class RDBRuntime extends EventEmitter {
     const fId = Math.min(this._lastFId + 1, frameId);
     if (fId > this._lastFId) {
       // no more lines: run to end
-      this.sendEvent("end");
       return;
     }
 
@@ -177,7 +176,7 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const fId = this._frame.fId;
+    const fId = this._frame.fId - 1;
     this.jumpToFrame(fId);
     this.sendEvent("stopOnStep");
 
