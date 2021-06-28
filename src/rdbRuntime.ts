@@ -171,7 +171,7 @@ export class RDBRuntime extends EventEmitter {
 
     // End session if theres no next row.
     if (row === undefined) {
-      this.sendEvent("end");
+      // this.sendEvent("end");
       return;
     }
 
@@ -208,8 +208,6 @@ export class RDBRuntime extends EventEmitter {
 
     await this.jumpToFrame(row.f_id);
     this.sendEvent("stopOnStep");
-
-    // this.reverseRun(event);
     return;
   }
 
@@ -219,7 +217,7 @@ export class RDBRuntime extends EventEmitter {
   public async stepIn() {
     // Stepping past last frame ends the debugging session.
     if (this._frame?.fId === this._lastFId) {
-      this.sendEvent("end");
+      // this.sendEvent("end");
       return;
     }
 
@@ -231,16 +229,36 @@ export class RDBRuntime extends EventEmitter {
   /**
    * "Step out" for RDB debug means: go to previous character
    */
-  public stepOut() {
-    if (typeof this._currentColumn === "number") {
-      this._currentColumn -= 1;
-      if (this._currentColumn === 0) {
-        this._currentColumn = undefined;
-      }
+  public async stepOut() {
+    // Cannot step out to the 0th frame.
+    if (!this._frame || this._frame.fBackId === 0) {
+      return;
     }
-    this.sendEvent("stopOnStep");
-  }
 
+    const getPrevFrameIdByStepOutSql = `
+      SELECT f_id FROM frames
+      WHERE f_id < $fId AND f_back_id < $fBackId
+      ORDER BY f_id DESC
+      LIMIT 1
+    `;
+
+    const row = await this._db.get(getPrevFrameIdByStepOutSql, {
+      $fId: this._frame.fId,
+      $fBackId: this._frame.fBackId,
+    });
+
+    // Cannot step back from first frame.
+    if (row === undefined) {
+      console.error(
+        "Expected fn to early exit before trying to run `stepOut` on first frame."
+      );
+      return;
+    }
+
+    await this.jumpToFrame(row.f_id);
+    this.sendEvent("stopOnStep");
+    return;
+  }
 
   private isObjectOrArrayWithContent(item) {
     return (
@@ -453,7 +471,7 @@ export class RDBRuntime extends EventEmitter {
       }
     }
     // no more lines: run to end
-    this.sendEvent("end");
+    // this.sendEvent("end");
   }
 
   private reverseRun(stepEvent?: string) {
