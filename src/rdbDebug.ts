@@ -69,8 +69,8 @@ export class RDBDebugSession extends LoggingDebugSession {
     super("rdb-debug.txt");
 
     // this debugger uses zero-based lines and columns
-    this.setDebuggerLinesStartAt1(false);
-    this.setDebuggerColumnsStartAt1(false);
+    this.setDebuggerLinesStartAt1(true);
+    this.setDebuggerColumnsStartAt1(true);
 
     this._runtime = new RDBRuntime(fileAccessor);
 
@@ -365,7 +365,6 @@ export class RDBDebugSession extends LoggingDebugSession {
           f.index,
           f.name,
           this.createSource(f.file),
-          // f.line
           this.convertDebuggerLineToClient(f.line)
         );
         if (typeof f.column === "number") {
