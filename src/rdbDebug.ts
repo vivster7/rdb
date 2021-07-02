@@ -18,7 +18,7 @@ import {
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
 import { basename } from "path";
-import { RDBRuntime, IRDBBreakpoint, FileAccessor } from "./RDBRuntime";
+import { RDBRuntime, FileAccessor } from "./RDBRuntime";
 import { Subject } from "await-notify";
 
 function timeout(ms: number) {
@@ -68,7 +68,6 @@ export class RDBDebugSession extends LoggingDebugSession {
   public constructor(fileAccessor: FileAccessor) {
     super("rdb-debug.txt");
 
-    // this debugger uses zero-based lines and columns
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
 
@@ -98,14 +97,7 @@ export class RDBDebugSession extends LoggingDebugSession {
         this.sendEvent(new StoppedEvent("exception", RDBDebugSession.threadID));
       }
     });
-    this._runtime.on("breakpointValidated", (bp: IRDBBreakpoint) => {
-      this.sendEvent(
-        new BreakpointEvent("changed", {
-          verified: bp.verified,
-          id: bp.id,
-        } as DebugProtocol.Breakpoint)
-      );
-    });
+
     this._runtime.on("output", (text, filePath, line, column) => {
       const e: DebugProtocol.OutputEvent = new OutputEvent(`${text}\n`);
 
@@ -151,8 +143,13 @@ export class RDBDebugSession extends LoggingDebugSession {
     // make VS Code show a 'step back' button
     response.body.supportsStepBack = true;
 
-    // make VS Code support data breakpoints
-    response.body.supportsDataBreakpoints = true;
+    response.body.supportsDataBreakpoints = false;
+    response.body.supportsFunctionBreakpoints = false;
+    response.body.supportsConditionalBreakpoints = false;
+    response.body.supportsInstructionBreakpoints = false;
+    response.body.supportsHitConditionalBreakpoints = false;
+    response.body.supportsDelayedStackTraceLoading = false;
+    response.body.supportsDisassembleRequest = false;
 
     // make VS Code support completion in REPL
     response.body.supportsCompletionsRequest = true;
@@ -236,16 +233,15 @@ export class RDBDebugSession extends LoggingDebugSession {
     args: DebugProtocol.SetBreakpointsArguments
   ): Promise<void> {
     const path = args.source.path as string;
-    const clientLines = args.lines || [];
+    const breakpoints = args.breakpoints ?? [];
 
-    // clear all breakpoints for this file
     this._runtime.clearBreakpoints(path);
 
     // set and verify breakpoint locations
-    const actualBreakpoints0 = clientLines.map(async (l) => {
+    const actualBreakpoints0 = breakpoints.map(async (b) => {
       const { verified, line, id } = await this._runtime.setBreakPoint(
         path,
-        this.convertClientLineToDebugger(l)
+        this.convertClientLineToDebugger(b.line)
       );
       const bp = new Breakpoint(
         verified,

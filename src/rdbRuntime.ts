@@ -118,8 +118,6 @@ export class RDBRuntime extends EventEmitter {
     await this.loadSource(program);
     this._currentLine = -1;
 
-    await this.verifyBreakpoints(this._sourceFile);
-
     if (stopOnEntry) {
       // we step once
       await this.step();
@@ -149,6 +147,10 @@ export class RDBRuntime extends EventEmitter {
     this._frame = GoetFrame.fromRow(row);
   }
 
+  // TODO: STEP SHOULD STOP AT BREAKPOINT IF IT CROSSES ONE!
+  // idea: union the breakpoint frames, then `order by f_id limit 1`?
+  // but need a temp breakpoint table or something....
+
   public async step() {
     // Handle first step
     if (!this._frame) {
@@ -158,8 +160,13 @@ export class RDBRuntime extends EventEmitter {
     }
 
     const getNextFrameIdByStepSql = `
-      SELECT f_id FROM frames
-      WHERE f_id > $fId AND f_back_id <= $fBackId
+      SELECT f_id from (
+        SELECT f_id FROM frames
+        WHERE f_id > $fId AND f_back_id <= $fBackId
+        UNION
+        SELECT f_id from frames
+        WHERE f_filename = $fFilename AND f_lineno IN $fLinenos
+      )
       ORDER BY f_id
       LIMIT 1
     `;
@@ -167,6 +174,7 @@ export class RDBRuntime extends EventEmitter {
     const row = await this._db.get(getNextFrameIdByStepSql, {
       $fId: this._frame.fId,
       $fBackId: this._frame.fBackId,
+      $fFilename: this._frame
     });
 
     // End session if theres no next row.
@@ -380,7 +388,7 @@ export class RDBRuntime extends EventEmitter {
     line: number
   ): Promise<IRDBBreakpoint> {
     const bp: IRDBBreakpoint = {
-      verified: false,
+      verified: true,
       line,
       id: this._breakpointId++,
     };
@@ -390,8 +398,6 @@ export class RDBRuntime extends EventEmitter {
       this._breakPoints.set(path, bps);
     }
     bps.push(bp);
-
-    await this.verifyBreakpoints(path);
 
     return bp;
   }
@@ -486,37 +492,6 @@ export class RDBRuntime extends EventEmitter {
     this._currentLine = 0;
     this._currentColumn = undefined;
     this.sendEvent("stopOnEntry");
-  }
-
-  private async verifyBreakpoints(path: string): Promise<void> {
-    if (this._noDebug) {
-      return;
-    }
-
-    const bps = this._breakPoints.get(path);
-    if (bps) {
-      await this.loadSource(path);
-      bps.forEach((bp) => {
-        if (!bp.verified && bp.line < this._sourceLines.length) {
-          const srcLine = this._sourceLines[bp.line].trim();
-
-          // if a line is empty or starts with '+' we don't allow to set a breakpoint but move the breakpoint down
-          if (srcLine.length === 0 || srcLine.indexOf("+") === 0) {
-            bp.line++;
-          }
-          // if a line starts with '-' we don't allow to set a breakpoint but move the breakpoint up
-          if (srcLine.indexOf("-") === 0) {
-            bp.line--;
-          }
-          // don't set 'verified' to true if the line contains the word 'lazy'
-          // in this case the breakpoint will be verified 'lazy' after hitting it once.
-          if (srcLine.indexOf("lazy") < 0) {
-            bp.verified = true;
-            this.sendEvent("breakpointValidated", bp);
-          }
-        }
-      });
-    }
   }
 
   /**
