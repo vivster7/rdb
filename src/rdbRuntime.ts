@@ -49,7 +49,7 @@ class GoetFrame {
     return {
       index: this.fId,
       name: `${this.fId}(${this.fId})(${this.fLineno})`,
-      file: "/Users/vivek.dasari/Code/rdb/sampleWorkspace/test.py",
+      file: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
       line: this.fLineno,
     };
   }
@@ -108,7 +108,7 @@ export class RDBRuntime extends EventEmitter {
     this._noDebug = noDebug;
 
     this._db = await open({
-      filename: "/Users/vivek.dasari/Code/rdb/test.rdb.sqlite3",
+      filename: "/Users/vivek/Code/rdb/test.rdb.sqlite3",
       driver: sql3Driver,
     });
 
@@ -163,18 +163,19 @@ export class RDBRuntime extends EventEmitter {
       SELECT f_id from (
         SELECT f_id FROM frames
         WHERE f_id > $fId AND f_back_id <= $fBackId
-        UNION
-        SELECT f_id from frames
-        WHERE f_filename = $fFilename AND f_lineno IN $fLinenos
-      )
-      ORDER BY f_id
-      LIMIT 1
-    `;
+        -- UNION
+        -- SELECT f_id from frames
+        -- WHERE f_filename = $fFilename AND f_lineno IN $fLinenos
+        )
+        ORDER BY f_id
+        LIMIT 1
+        `;
 
     const row = await this._db.get(getNextFrameIdByStepSql, {
       $fId: this._frame.fId,
       $fBackId: this._frame.fBackId,
-      $fFilename: this._frame
+      // $fFilename: this._frame.fFilename,
+      // $fLinenos:
     });
 
     // End session if theres no next row.
