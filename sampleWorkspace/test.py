@@ -1,5 +1,5 @@
-# from goet.tracer.sql import SqlTracer
-# from goet.lib.db.sqlite import connection
+from goet.tracer.sql import SqlTracer
+from goet.lib.db.sqlite import connection
 
 
 class A:
@@ -23,5 +23,5 @@ def fn2():
     return a
 
 
-# with SqlTracer(connection) as t:
-fn()
+with SqlTracer(connection) as t:
+    fn()

@@ -127,6 +127,13 @@ export class RDBRuntime extends EventEmitter {
     }
   }
 
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+
   public continue() {
     this.run(undefined);
   }
@@ -147,10 +154,6 @@ export class RDBRuntime extends EventEmitter {
     this._frame = GoetFrame.fromRow(row);
   }
 
-  // TODO: STEP SHOULD STOP AT BREAKPOINT IF IT CROSSES ONE!
-  // idea: union the breakpoint frames, then `order by f_id limit 1`?
-  // but need a temp breakpoint table or something....
-
   public async step() {
     // Handle first step
     if (!this._frame) {
@@ -159,23 +162,31 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const getNextFrameIdByStepSql = `
-      SELECT f_id from (
-        SELECT f_id FROM frames
-        WHERE f_id > $fId AND f_back_id <= $fBackId
-        -- UNION
-        -- SELECT f_id from frames
-        -- WHERE f_filename = $fFilename AND f_lineno IN $fLinenos
+    const getbps = () =>
+      Array.from(this._breakPoints.entries())
+        .map(([filename, breakpoints]) =>
+          breakpoints.map(({ line }) => `('${filename}', ${line})`)
         )
-        ORDER BY f_id
-        LIMIT 1
-        `;
+        .reduce((acc, x) => acc.concat(x), [])
+        .join(", ");
+
+    const getNextFrameIdByStepSql = `
+      WITH 
+        breakpoints(filename, lineno) AS (VALUES ${getbps()}),
+        forward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id > $fId)
+      SELECT f_id FROM (
+        SELECT f_id FROM forward_frames
+        WHERE f_back_id <= $fBackId
+        UNION
+        SELECT f_id FROM forward_frames, breakpoints
+        WHERE f_filename = breakpoints.filename AND f_lineno = breakpoints.lineno)
+      ORDER BY f_id
+      LIMIT 1
+    `;
 
     const row = await this._db.get(getNextFrameIdByStepSql, {
       $fId: this._frame.fId,
       $fBackId: this._frame.fBackId,
-      // $fFilename: this._frame.fFilename,
-      // $fLinenos:
     });
 
     // End session if theres no next row.
@@ -195,9 +206,24 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
+    const getbps = () =>
+      Array.from(this._breakPoints.entries())
+        .map(([filename, breakpoints]) =>
+          breakpoints.map(({ line }) => `('${filename}', ${line})`)
+        )
+        .reduce((acc, x) => acc.concat(x), [])
+        .join(", ");
+
     const getPrevFrameIdByStepSql = `
-      SELECT f_id FROM frames
-      WHERE f_id < $fId AND f_back_id <= $fBackId
+      WITH 
+        breakpoints(filename, lineno) AS (VALUES ${getbps()}),
+        backward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id < $fId)
+      SELECT f_id FROM (
+        SELECT f_id FROM backward_frames
+        WHERE f_back_id <= $fBackId
+        UNION
+        SELECT f_id FROM backward_frames, breakpoints
+        WHERE f_filename = breakpoints.filename AND f_lineno = breakpoints.lineno)
       ORDER BY f_id DESC
       LIMIT 1
     `;
@@ -246,7 +272,7 @@ export class RDBRuntime extends EventEmitter {
 
     const getPrevFrameIdByStepOutSql = `
       SELECT f_id FROM frames
-      WHERE f_id < $fId AND f_back_id < $fBackId
+      WHERE f_id < $fId AND (f_back_id < $fBackId OR f_back_id IS NULL)
       ORDER BY f_id DESC
       LIMIT 1
     `;
