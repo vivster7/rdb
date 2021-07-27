@@ -81,10 +81,10 @@ export class RDBRuntime extends EventEmitter {
 
   private _breakAddresses = new Set<string>();
 
-  private _noDebug = false;
+  // private _noDebug = false;
 
-  private _namedException: string | undefined;
-  private _otherExceptions = false;
+  // private _namedException: string | undefined;
+  // private _otherExceptions = false;
 
   // TODO: figure out where to initialize this.
   private _db: Database = null as unknown as Database;
@@ -105,7 +105,7 @@ export class RDBRuntime extends EventEmitter {
     stopOnEntry: boolean,
     noDebug: boolean
   ): Promise<void> {
-    this._noDebug = noDebug;
+    // this._noDebug = noDebug;
 
     this._db = await open({
       filename: "/Users/vivek/Code/rdb/test.rdb.sqlite3",
@@ -127,19 +127,76 @@ export class RDBRuntime extends EventEmitter {
     }
   }
 
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
-  // TODO: MAKE CONTINUE + REVERSE CONTINUE WORK
+  public async continue() {
+    // Handle first step
+    if (!this._frame) {
+      await this.jumpToFrame(1);
+      this.sendEvent("stopOnStep");
+      return;
+    }
 
-  public continue() {
-    this.run(undefined);
+    const getNextFrameIdByContinueSql = `
+      WITH 
+        breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
+        forward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id > $fId),
+        last_frame(f_id) AS (SELECT f_id FROM frames ORDER BY f_id DESC LIMIT 1)
+      SELECT f_id FROM (
+        SELECT f_id FROM last_frame
+        UNION
+        SELECT f_id FROM forward_frames, breakpoints
+        WHERE f_filename = breakpoints.filename AND f_lineno = breakpoints.lineno)
+      ORDER BY f_id
+      LIMIT 1
+    `;
+
+    const row = await this._db.get(getNextFrameIdByContinueSql, {
+      $fId: this._frame.fId,
+    });
+
+    // End session if theres no next row.
+    if (row === undefined) {
+      // this.sendEvent("end");
+      return;
+    }
+
+    await this.jumpToFrame(row.f_id);
+    this.sendEvent("stopOnStep");
+    return;
   }
 
-  public reverseContinue() {
-    this.reverseRun(undefined);
+  public async reverseContinue() {
+    // Cannot step back from first frame.
+    if (!this._frame || this._frame.fId === 1) {
+      return;
+    }
+
+    const getNextFrameIdByContinueSql = `
+      WITH 
+        breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
+        backward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id < $fId),
+        first_frame(f_id) AS (SELECT f_id FROM frames ORDER BY f_id LIMIT 1)
+      SELECT f_id FROM (
+        SELECT f_id FROM first_frame
+        UNION
+        SELECT f_id FROM backward_frames, breakpoints
+        WHERE f_filename = breakpoints.filename AND f_lineno = breakpoints.lineno)
+      ORDER BY f_id DESC
+      LIMIT 1
+    `;
+
+    const row = await this._db.get(getNextFrameIdByContinueSql, {
+      $fId: this._frame.fId,
+    });
+
+    // End session if theres no next row.
+    if (row === undefined) {
+      // this.sendEvent("end");
+      return;
+    }
+
+    await this.jumpToFrame(row.f_id);
+    this.sendEvent("stopOnStep");
+    return;
   }
 
   private async jumpToFrame(frameId: number): Promise<void> {
@@ -162,17 +219,9 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const getbps = () =>
-      Array.from(this._breakPoints.entries())
-        .map(([filename, breakpoints]) =>
-          breakpoints.map(({ line }) => `('${filename}', ${line})`)
-        )
-        .reduce((acc, x) => acc.concat(x), [])
-        .join(", ");
-
     const getNextFrameIdByStepSql = `
       WITH 
-        breakpoints(filename, lineno) AS (VALUES ${getbps()}),
+        breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
         forward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id > $fId)
       SELECT f_id FROM (
         SELECT f_id FROM forward_frames
@@ -206,17 +255,9 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const getbps = () =>
-      Array.from(this._breakPoints.entries())
-        .map(([filename, breakpoints]) =>
-          breakpoints.map(({ line }) => `('${filename}', ${line})`)
-        )
-        .reduce((acc, x) => acc.concat(x), [])
-        .join(", ");
-
     const getPrevFrameIdByStepSql = `
       WITH 
-        breakpoints(filename, lineno) AS (VALUES ${getbps()}),
+        breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
         backward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id < $fId)
       SELECT f_id FROM (
         SELECT f_id FROM backward_frames
@@ -466,13 +507,13 @@ export class RDBRuntime extends EventEmitter {
     return false;
   }
 
-  public setExceptionsFilters(
-    namedException: string | undefined,
-    otherExceptions: boolean
-  ): void {
-    this._namedException = namedException;
-    this._otherExceptions = otherExceptions;
-  }
+  // public setExceptionsFilters(
+  //   namedException: string | undefined,
+  //   otherExceptions: boolean
+  // ): void {
+  //   this._namedException = namedException;
+  //   this._otherExceptions = otherExceptions;
+  // }
 
   /*
    * Clear all data breakpoints.
@@ -495,112 +536,134 @@ export class RDBRuntime extends EventEmitter {
    * Run through the file.
    * If stepEvent is specified only run a single step and emit the stepEvent.
    */
-  private run(stepEvent?: string) {
-    for (let ln = this._currentLine + 1; ln < this._sourceLines.length; ln++) {
-      if (this.fireEventsForLine(ln, stepEvent)) {
-        this._currentLine = ln;
-        this._currentColumn = undefined;
-        return true;
-      }
-    }
-    // no more lines: run to end
-    // this.sendEvent("end");
-  }
+  // private run(stepEvent?: string) {
+  //   for (let ln = this._currentLine + 1; ln < this._sourceLines.length; ln++) {
+  //     if (this.fireEventsForLine(ln, stepEvent)) {
+  //       this._currentLine = ln;
+  //       this._currentColumn = undefined;
+  //       return true;
+  //     }
+  //   }
+  //   // no more lines: run to end
+  //   // this.sendEvent("end");
+  // }
 
-  private reverseRun(stepEvent?: string) {
-    for (let ln = this._currentLine - 1; ln >= 0; ln--) {
-      if (this.fireEventsForLine(ln, stepEvent)) {
-        this._currentLine = ln;
-        this._currentColumn = undefined;
-        return;
-      }
-    }
-    // no more lines: stop at first line
-    this._currentLine = 0;
-    this._currentColumn = undefined;
-    this.sendEvent("stopOnEntry");
-  }
+  // private reverseRun(stepEvent?: string) {
+  //   for (let ln = this._currentLine - 1; ln >= 0; ln--) {
+  //     if (this.fireEventsForLine(ln, stepEvent)) {
+  //       this._currentLine = ln;
+  //       this._currentColumn = undefined;
+  //       return;
+  //     }
+  //   }
+  //   // no more lines: stop at first line
+  //   this._currentLine = 0;
+  //   this._currentColumn = undefined;
+  //   this.sendEvent("stopOnEntry");
+  // }
 
   /**
    * Fire events if line has a breakpoint or the word 'exception' or 'exception(...)' is found.
    * Returns true if execution needs to stop.
    */
-  private fireEventsForLine(ln: number, stepEvent?: string): boolean {
-    if (this._noDebug) {
-      return false;
-    }
+  // private fireEventsForLine(ln: number, stepEvent?: string): boolean {
+  //   if (this._noDebug) {
+  //     return false;
+  //   }
 
-    const line = this._sourceLines[ln].trim();
+  //   const line = this._sourceLines[ln].trim();
 
-    // if 'log(...)' found in source -> send argument to debug console
-    const matches = /log\((.*)\)/.exec(line);
-    if (matches && matches.length === 2) {
-      this.sendEvent("output", matches[1], this._sourceFile, ln, matches.index);
-    }
+  //   // if 'log(...)' found in source -> send argument to debug console
+  //   const matches = /log\((.*)\)/.exec(line);
+  //   if (matches && matches.length === 2) {
+  //     this.sendEvent("output", matches[1], this._sourceFile, ln, matches.index);
+  //   }
 
-    // if a word in a line matches a data breakpoint, fire a 'dataBreakpoint' event
-    const words = line.split(" ");
-    for (const word of words) {
-      if (this._breakAddresses.has(word)) {
-        this.sendEvent("stopOnDataBreakpoint");
-        return true;
-      }
-    }
+  //   // if a word in a line matches a data breakpoint, fire a 'dataBreakpoint' event
+  //   const words = line.split(" ");
+  //   for (const word of words) {
+  //     if (this._breakAddresses.has(word)) {
+  //       this.sendEvent("stopOnDataBreakpoint");
+  //       return true;
+  //     }
+  //   }
 
-    // if pattern 'exception(...)' found in source -> throw named exception
-    const matches2 = /exception\((.*)\)/.exec(line);
-    if (matches2 && matches2.length === 2) {
-      const exception = matches2[1].trim();
-      if (this._namedException === exception) {
-        this.sendEvent("stopOnException", exception);
-        return true;
-      } else {
-        if (this._otherExceptions) {
-          this.sendEvent("stopOnException", undefined);
-          return true;
-        }
-      }
-    } else {
-      // if word 'exception' found in source -> throw exception
-      if (line.indexOf("exception") >= 0) {
-        if (this._otherExceptions) {
-          this.sendEvent("stopOnException", undefined);
-          return true;
-        }
-      }
-    }
+  //   // if pattern 'exception(...)' found in source -> throw named exception
+  //   const matches2 = /exception\((.*)\)/.exec(line);
+  //   if (matches2 && matches2.length === 2) {
+  //     const exception = matches2[1].trim();
+  //     if (this._namedException === exception) {
+  //       this.sendEvent("stopOnException", exception);
+  //       return true;
+  //     } else {
+  //       if (this._otherExceptions) {
+  //         this.sendEvent("stopOnException", undefined);
+  //         return true;
+  //       }
+  //     }
+  //   } else {
+  //     // if word 'exception' found in source -> throw exception
+  //     if (line.indexOf("exception") >= 0) {
+  //       if (this._otherExceptions) {
+  //         this.sendEvent("stopOnException", undefined);
+  //         return true;
+  //       }
+  //     }
+  //   }
 
-    // is there a breakpoint?
-    const breakpoints = this._breakPoints.get(this._sourceFile);
-    if (breakpoints) {
-      const bps = breakpoints.filter((bp) => bp.line === ln);
-      if (bps.length > 0) {
-        // send 'stopped' event
-        this.sendEvent("stopOnBreakpoint");
+  //   // is there a breakpoint?
+  //   const breakpoints = this._breakPoints.get(this._sourceFile);
+  //   if (breakpoints) {
+  //     const bps = breakpoints.filter((bp) => bp.line === ln);
+  //     if (bps.length > 0) {
+  //       // send 'stopped' event
+  //       this.sendEvent("stopOnBreakpoint");
 
-        // the following shows the use of 'breakpoint' events to update properties of a breakpoint in the UI
-        // if breakpoint is not yet verified, verify it now and send a 'breakpoint' update event
-        if (!bps[0].verified) {
-          bps[0].verified = true;
-          this.sendEvent("breakpointValidated", bps[0]);
-        }
-        return true;
-      }
-    }
+  //       // the following shows the use of 'breakpoint' events to update properties of a breakpoint in the UI
+  //       // if breakpoint is not yet verified, verify it now and send a 'breakpoint' update event
+  //       if (!bps[0].verified) {
+  //         bps[0].verified = true;
+  //         this.sendEvent("breakpointValidated", bps[0]);
+  //       }
+  //       return true;
+  //     }
+  //   }
 
-    // non-empty line
-    if (stepEvent && line.length > 0) {
-      this.sendEvent(stepEvent);
-      return true;
-    }
+  //   // non-empty line
+  //   if (stepEvent && line.length > 0) {
+  //     this.sendEvent(stepEvent);
+  //     return true;
+  //   }
 
-    // nothing interesting found -> continue
-    return false;
-  }
+  //   // nothing interesting found -> continue
+  //   return false;
+  // }
 
   private sendEvent(event: string, ...args: any[]) {
     setImmediate((_) => {
       this.emit(event, ...args);
     });
+  }
+
+  /**
+   * Returns breakpoints as a SQL `values` construct.
+   *
+   * @example
+   * >> getBreakpointsAsSqlValues()
+   * (('/Users/vivek/filename.py', 7), ('/Users/vivek/filename.py', 8))
+   *
+   * // In SQL
+   * `SELECT * FROM (VALUES ${this.getBreakpointsAsSqlValues()})`
+   */
+  private getBreakpointsAsSqlValues(): string {
+    if (this._breakPoints.size === 0) {
+      return `'', ''`;
+    }
+    return Array.from(this._breakPoints.entries())
+      .map(([filename, breakpoints]) =>
+        breakpoints.map(({ line }) => `('${filename}', ${line})`)
+      )
+      .reduce((acc, x) => acc.concat(x), [])
+      .join(", ");
   }
 }
