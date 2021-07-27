@@ -27,7 +27,7 @@
     "watch": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/extension.webpack.config.js",
     "watch2": "tsc -watch -p ./",
     "pretest": "yarn run compile && yarn run lint",
-    "test": "node ./out/test/runTest.js",
+    "test": "./node_modules/mocha/bin/mocha --require ./node_modules/ts-node/register src/**/*.spec.ts",
     "package-ext": "webpack --mode production --config ./build/extension.webpack.config.js"
   },
   "dependencies": {
@@ -48,6 +48,7 @@
     "glob": "^7.1.6",
     "mocha": "^8.3.2",
     "ts-loader": "^8.1.0",
+    "ts-node": "^10.1.0",
     "typescript": "^4.2.3",
     "vscode-debugadapter-testsupport": "^1.47.0",
     "webpack": "^4.46.0",

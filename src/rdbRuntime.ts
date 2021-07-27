@@ -93,18 +93,17 @@ export class RDBRuntime extends EventEmitter {
 
   private _variableHandles = new Handles<string>();
 
-  constructor(private _fileAccessor: FileAccessor) {
+  constructor() {
     super();
   }
 
   /**
    * Start executing the given program.
    */
-  public async start(
-    program: string,
-    stopOnEntry: boolean,
-    noDebug: boolean
-  ): Promise<void> {
+  // program: string,
+  // stopOnEntry: boolean,
+  // noDebug: boolean
+  public async start(): Promise<void> {
     // this._noDebug = noDebug;
 
     this._db = await open({
@@ -115,16 +114,16 @@ export class RDBRuntime extends EventEmitter {
     const row = await this._db.get("select max(f_id) from frames");
     this._lastFId = row["max(f_id)"];
 
-    await this.loadSource(program);
+    // await this.loadSource(program);
     this._currentLine = -1;
 
-    if (stopOnEntry) {
-      // we step once
-      await this.step();
-    } else {
-      // we just start to run until we hit a breakpoint or an exception
-      this.continue();
-    }
+    // we step once
+    await this.step();
+    // if (stopOnEntry) {
+    // } else {
+    //   // we just start to run until we hit a breakpoint or an exception
+    //   this.continue();
+    // }
   }
 
   public async continue() {
@@ -524,13 +523,13 @@ export class RDBRuntime extends EventEmitter {
 
   // private methods
 
-  private async loadSource(file: string): Promise<void> {
-    if (this._sourceFile !== file) {
-      this._sourceFile = file;
-      const contents = await this._fileAccessor.readFile(file);
-      this._sourceLines = contents.split(/\r?\n/);
-    }
-  }
+  // private async loadSource(file: string): Promise<void> {
+  //   if (this._sourceFile !== file) {
+  //     this._sourceFile = file;
+  //     const contents = await this._fileAccessor.readFile(file);
+  //     this._sourceLines = contents.split(/\r?\n/);
+  //   }
+  // }
 
   /**
    * Run through the file.

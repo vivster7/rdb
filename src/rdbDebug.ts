@@ -71,7 +71,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
 
-    this._runtime = new RDBRuntime(fileAccessor);
+    this._runtime = new RDBRuntime();
 
     // setup event handlers
     this._runtime.on("stopOnEntry", () => {
@@ -223,7 +223,8 @@ export class RDBDebugSession extends LoggingDebugSession {
     await this._configurationDone.wait(1000);
 
     // start the program in the runtime
-    await this._runtime.start(args.program, !!args.stopOnEntry, !!args.noDebug);
+    await this._runtime.start();
+    // await this._runtime.start(args.program, !!args.stopOnEntry, !!args.noDebug);
 
     this.sendResponse(response);
   }
