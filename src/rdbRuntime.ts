@@ -93,7 +93,7 @@ export class RDBRuntime extends EventEmitter {
 
   private _variableHandles = new Handles<string>();
 
-  constructor() {
+  constructor(private _dbPath: string) {
     super();
   }
 
@@ -107,7 +107,7 @@ export class RDBRuntime extends EventEmitter {
     // this._noDebug = noDebug;
 
     this._db = await open({
-      filename: "/Users/vivek/Code/rdb/test.rdb.sqlite3",
+      filename: this._dbPath,
       driver: sql3Driver,
     });
 
@@ -117,13 +117,8 @@ export class RDBRuntime extends EventEmitter {
     // await this.loadSource(program);
     this._currentLine = -1;
 
-    // we step once
+    // step once at the beginning
     await this.step();
-    // if (stopOnEntry) {
-    // } else {
-    //   // we just start to run until we hit a breakpoint or an exception
-    //   this.continue();
-    // }
   }
 
   public async continue() {

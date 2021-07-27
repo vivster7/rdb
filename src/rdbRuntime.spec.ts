@@ -6,7 +6,7 @@ describe("RDBRuntime", () => {
   let runtime: RDBRuntime;
 
   beforeEach(() => {
-    runtime = new RDBRuntime();
+    runtime = new RDBRuntime("/Users/vivek/Code/rdb/test.rdb.sqlite3");
     runtime.start();
   });
 

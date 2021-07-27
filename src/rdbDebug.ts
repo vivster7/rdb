@@ -71,7 +71,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
 
-    this._runtime = new RDBRuntime();
+    this._runtime = new RDBRuntime("/Users/vivek/Code/rdb/test.rdb.sqlite3");
 
     // setup event handlers
     this._runtime.on("stopOnEntry", () => {
