@@ -27,6 +27,7 @@ class GoetFrame {
     public fId: number,
     public fBackId: number | null,
     public fFilename: string,
+    public fFuncname: string,
     public fLocals: { [key: string]: any },
     public fLineno: number
   ) {}
@@ -36,6 +37,7 @@ class GoetFrame {
       row.f_id,
       row.f_back_id,
       row.f_filename,
+      row.f_funcname,
       JSON.parse(row.f_locals),
       row.f_lineno
     );
@@ -44,7 +46,7 @@ class GoetFrame {
   toStackFrame(): IStackFrame {
     return {
       index: this.fId,
-      name: `${this.fId}(${this.fId})(${this.fLineno})`,
+      name: `${this.fFuncname} (${this.fLineno})`,
       file: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
       line: this.fLineno,
     };

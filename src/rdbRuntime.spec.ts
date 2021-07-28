@@ -31,12 +31,6 @@ var assert = require("assert");
 // 26  with SqlTracer(connection) as t:
 // 27      fn()
 
-// TODO: WRITE TESTS
-// TODO: WRITE TESTS
-// TODO: WRITE TESTS
-// TODO: WRITE TESTS
-// TODO: WRITE TESTS
-
 const testDB = "/Users/vivek/Code/rdb/test.rdb.sqlite3";
 const testFile = "/Users/vivek/Code/rdb/sampleWorkspace/test.py";
 
@@ -89,19 +83,19 @@ describe("RDBRuntime", async () => {
         file: testFile,
         index: 3,
         line: 7,
-        name: "3(3)(7)",
+        name: "__init__ (7)",
       },
       {
         file: testFile,
         index: 2,
         line: 14,
-        name: "2(2)(14)",
+        name: "fn (14)",
       },
       {
         file: testFile,
         index: 1,
         line: 27,
-        name: "1(1)(27)",
+        name: "<module> (27)",
       },
     ]);
   });
