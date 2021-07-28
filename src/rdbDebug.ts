@@ -18,7 +18,8 @@ import {
 } from "vscode-debugadapter";
 import { DebugProtocol } from "vscode-debugprotocol";
 import { basename } from "path";
-import { RDBRuntime, FileAccessor } from "./RDBRuntime";
+import { RDBRuntime } from "./RDBRuntime";
+import { FileAccessor } from "./FileAccessor";
 import { Subject } from "await-notify";
 
 function timeout(ms: number) {
@@ -159,7 +160,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     response.body.supportsCancelRequest = true;
 
     // make VS Code send the breakpointLocations request
-    response.body.supportsBreakpointLocationsRequest = true;
+    response.body.supportsBreakpointLocationsRequest = false;
 
     // make VS Code provide "Step in Target" functionality
     response.body.supportsStepInTargetsRequest = false;
@@ -262,31 +263,16 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.sendResponse(response);
   }
 
-  protected breakpointLocationsRequest(
-    response: DebugProtocol.BreakpointLocationsResponse,
-    args: DebugProtocol.BreakpointLocationsArguments,
-    request?: DebugProtocol.Request
-  ): void {
-    if (args.source.path) {
-      const bps = this._runtime.getBreakpoints(
-        args.source.path,
-        this.convertClientLineToDebugger(args.line)
-      );
-      response.body = {
-        breakpoints: bps.map((col) => {
-          return {
-            line: args.line,
-            column: this.convertDebuggerColumnToClient(col),
-          };
-        }),
-      };
-    } else {
-      response.body = {
-        breakpoints: [],
-      };
-    }
-    this.sendResponse(response);
-  }
+  // protected breakpointLocationsRequest(
+  //   response: DebugProtocol.BreakpointLocationsResponse,
+  //   args: DebugProtocol.BreakpointLocationsArguments,
+  //   request?: DebugProtocol.Request
+  // ): void {
+  //   response.body = {
+  //     breakpoints: [],
+  //   };
+  //   this.sendResponse(response);
+  // }
 
   // protected async setExceptionBreakPointsRequest(
   //   response: DebugProtocol.SetExceptionBreakpointsResponse,
@@ -348,13 +334,7 @@ export class RDBDebugSession extends LoggingDebugSession {
     response: DebugProtocol.StackTraceResponse,
     args: DebugProtocol.StackTraceArguments
   ): Promise<void> {
-    // const startFrame =
-    //   typeof args.startFrame === "number" ? args.startFrame : 0;
-    // const maxLevels = typeof args.levels === "number" ? args.levels : 1000;
-    // const endFrame = startFrame + maxLevels;
-    // const stk = await this._runtime.stack(startFrame, endFrame);
-
-    const stk = await this._runtime.stack2();
+    const stk = await this._runtime.stack();
 
     response.body = {
       stackFrames: stk.frames.map((f) => {

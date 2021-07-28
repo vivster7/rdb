@@ -2,7 +2,7 @@ import { RDBDebugSession } from './RDBDebug';
 
 import { readFile } from 'fs';
 import * as Net from 'net';
-import { FileAccessor } from './RDBRuntime';
+import { FileAccessor } from "./FileAccessor";
 
 /*
  * debugAdapter.js is the entrypoint of the debug adapter when it runs as a separate process.

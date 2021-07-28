@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { RDBDebugSession } from './RDBDebug';
-import { FileAccessor } from './RDBRuntime';
+import { FileAccessor } from "./FileAccessor";
 
 export default function activateDebugger(context: vscode.ExtensionContext) {
 

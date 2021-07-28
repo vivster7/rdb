@@ -3,10 +3,6 @@ import { Database as sql3Driver } from "sqlite3";
 import { Database, open } from "sqlite";
 import { Handles, Scope, Variable } from "vscode-debugadapter";
 
-export interface FileAccessor {
-  readFile(path: string): Promise<string>;
-}
-
 export interface IRDBBreakpoint {
   id: number;
   line: number;
@@ -29,7 +25,7 @@ interface IStack {
 class GoetFrame {
   constructor(
     public fId: number,
-    public fBackId: number,
+    public fBackId: number | null,
     public fFilename: string,
     public fLocals: { [key: string]: any },
     public fLineno: number
@@ -66,11 +62,7 @@ export class RDBRuntime extends EventEmitter {
   }
 
   // the contents (= lines) of the one and only file
-  private _sourceLines: string[] = [];
-
-  // This is the next line that will be 'executed'
-  private _currentLine = 0;
-  private _currentColumn: number | undefined;
+  // private _sourceLines: string[] = [];
 
   // maps from sourceFile to array of RDB breakpoints
   private _breakPoints = new Map<string, IRDBBreakpoint[]>();
@@ -100,9 +92,6 @@ export class RDBRuntime extends EventEmitter {
   /**
    * Start executing the given program.
    */
-  // program: string,
-  // stopOnEntry: boolean,
-  // noDebug: boolean
   public async start(): Promise<void> {
     // this._noDebug = noDebug;
 
@@ -113,9 +102,6 @@ export class RDBRuntime extends EventEmitter {
 
     const row = await this._db.get("select max(f_id) from frames");
     this._lastFId = row["max(f_id)"];
-
-    // await this.loadSource(program);
-    this._currentLine = -1;
 
     // step once at the beginning
     await this.step();
@@ -229,7 +215,7 @@ export class RDBRuntime extends EventEmitter {
 
     const row = await this._db.get(getNextFrameIdByStepSql, {
       $fId: this._frame.fId,
-      $fBackId: this._frame.fBackId,
+      $fBackId: this._frame.fBackId ?? 0,
     });
 
     // End session if theres no next row.
@@ -265,7 +251,7 @@ export class RDBRuntime extends EventEmitter {
 
     const row = await this._db.get(getPrevFrameIdByStepSql, {
       $fId: this._frame.fId,
-      $fBackId: this._frame.fBackId,
+      $fBackId: this._frame.fBackId ?? 0,
     });
 
     // Cannot step back from first frame.
@@ -301,7 +287,7 @@ export class RDBRuntime extends EventEmitter {
    */
   public async stepOut() {
     // Cannot step out to the 0th frame.
-    if (!this._frame || this._frame.fBackId === 0) {
+    if (!this._frame || !this._frame.fBackId) {
       return;
     }
 
@@ -314,7 +300,7 @@ export class RDBRuntime extends EventEmitter {
 
     const row = await this._db.get(getPrevFrameIdByStepOutSql, {
       $fId: this._frame.fId,
-      $fBackId: this._frame.fBackId,
+      $fBackId: this._frame.fBackId ?? 0,
     });
 
     // Cannot step back from first frame.
@@ -369,7 +355,13 @@ export class RDBRuntime extends EventEmitter {
     });
   }
 
-  public async stack2(): Promise<IStack> {
+  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
+  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
+  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
+  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
+  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
+
+  public async stack(): Promise<IStack> {
     if (!this._frame) {
       return { frames: [], count: 0 };
     }
@@ -387,7 +379,7 @@ export class RDBRuntime extends EventEmitter {
     ORDER BY f_back_ID DESC;`;
 
     const rows = await this._db.all(stacktraceSql, {
-      $fBackId: this._frame.fBackId,
+      $fBackId: this._frame.fBackId ?? 0,
     });
     const frames = [this._frame, ...rows.map(GoetFrame.fromRow)];
     return {
@@ -396,51 +388,24 @@ export class RDBRuntime extends EventEmitter {
     };
   }
 
-  /**
-   * Returns a stacktrace, starting at `this._frame`
-   */
-  public async stack(startFrame: number, endFrame: number): Promise<IStack> {
-    const words = this._sourceLines[this._currentLine].trim().split(/\s+/);
+  // public getBreakpoints(path: string, line: number): number[] {
+  //   const l = this._sourceLines[line];
 
-    const frames = new Array<IStackFrame>();
-    // every word of the current line becomes a stack frame.
-    for (let i = startFrame; i < Math.min(endFrame, words.length); i++) {
-      const name = words[i]; // use a word of the line as the stackframe name
-      const stackFrame: IStackFrame = {
-        index: i,
-        name: `${name}(${i})`,
-        file: this._sourceFile,
-        line: this._currentLine,
-      };
-      if (typeof this._currentColumn === "number") {
-        stackFrame.column = this._currentColumn;
-      }
-      frames.push(stackFrame);
-    }
-    return {
-      frames: frames,
-      count: words.length,
-    };
-  }
+  //   let sawSpace = true;
+  //   const bps: number[] = [];
+  //   for (let i = 0; i < l.length; i++) {
+  //     if (l[i] !== " ") {
+  //       if (sawSpace) {
+  //         bps.push(i);
+  //         sawSpace = false;
+  //       }
+  //     } else {
+  //       sawSpace = true;
+  //     }
+  //   }
 
-  public getBreakpoints(path: string, line: number): number[] {
-    const l = this._sourceLines[line];
-
-    let sawSpace = true;
-    const bps: number[] = [];
-    for (let i = 0; i < l.length; i++) {
-      if (l[i] !== " ") {
-        if (sawSpace) {
-          bps.push(i);
-          sawSpace = false;
-        }
-      } else {
-        sawSpace = true;
-      }
-    }
-
-    return bps;
-  }
+  //   return bps;
+  // }
 
   /*
    * Set breakpoint in file with given line.
@@ -501,137 +466,12 @@ export class RDBRuntime extends EventEmitter {
     return false;
   }
 
-  // public setExceptionsFilters(
-  //   namedException: string | undefined,
-  //   otherExceptions: boolean
-  // ): void {
-  //   this._namedException = namedException;
-  //   this._otherExceptions = otherExceptions;
-  // }
-
   /*
    * Clear all data breakpoints.
    */
   public clearAllDataBreakpoints(): void {
     this._breakAddresses.clear();
   }
-
-  // private methods
-
-  // private async loadSource(file: string): Promise<void> {
-  //   if (this._sourceFile !== file) {
-  //     this._sourceFile = file;
-  //     const contents = await this._fileAccessor.readFile(file);
-  //     this._sourceLines = contents.split(/\r?\n/);
-  //   }
-  // }
-
-  /**
-   * Run through the file.
-   * If stepEvent is specified only run a single step and emit the stepEvent.
-   */
-  // private run(stepEvent?: string) {
-  //   for (let ln = this._currentLine + 1; ln < this._sourceLines.length; ln++) {
-  //     if (this.fireEventsForLine(ln, stepEvent)) {
-  //       this._currentLine = ln;
-  //       this._currentColumn = undefined;
-  //       return true;
-  //     }
-  //   }
-  //   // no more lines: run to end
-  //   // this.sendEvent("end");
-  // }
-
-  // private reverseRun(stepEvent?: string) {
-  //   for (let ln = this._currentLine - 1; ln >= 0; ln--) {
-  //     if (this.fireEventsForLine(ln, stepEvent)) {
-  //       this._currentLine = ln;
-  //       this._currentColumn = undefined;
-  //       return;
-  //     }
-  //   }
-  //   // no more lines: stop at first line
-  //   this._currentLine = 0;
-  //   this._currentColumn = undefined;
-  //   this.sendEvent("stopOnEntry");
-  // }
-
-  /**
-   * Fire events if line has a breakpoint or the word 'exception' or 'exception(...)' is found.
-   * Returns true if execution needs to stop.
-   */
-  // private fireEventsForLine(ln: number, stepEvent?: string): boolean {
-  //   if (this._noDebug) {
-  //     return false;
-  //   }
-
-  //   const line = this._sourceLines[ln].trim();
-
-  //   // if 'log(...)' found in source -> send argument to debug console
-  //   const matches = /log\((.*)\)/.exec(line);
-  //   if (matches && matches.length === 2) {
-  //     this.sendEvent("output", matches[1], this._sourceFile, ln, matches.index);
-  //   }
-
-  //   // if a word in a line matches a data breakpoint, fire a 'dataBreakpoint' event
-  //   const words = line.split(" ");
-  //   for (const word of words) {
-  //     if (this._breakAddresses.has(word)) {
-  //       this.sendEvent("stopOnDataBreakpoint");
-  //       return true;
-  //     }
-  //   }
-
-  //   // if pattern 'exception(...)' found in source -> throw named exception
-  //   const matches2 = /exception\((.*)\)/.exec(line);
-  //   if (matches2 && matches2.length === 2) {
-  //     const exception = matches2[1].trim();
-  //     if (this._namedException === exception) {
-  //       this.sendEvent("stopOnException", exception);
-  //       return true;
-  //     } else {
-  //       if (this._otherExceptions) {
-  //         this.sendEvent("stopOnException", undefined);
-  //         return true;
-  //       }
-  //     }
-  //   } else {
-  //     // if word 'exception' found in source -> throw exception
-  //     if (line.indexOf("exception") >= 0) {
-  //       if (this._otherExceptions) {
-  //         this.sendEvent("stopOnException", undefined);
-  //         return true;
-  //       }
-  //     }
-  //   }
-
-  //   // is there a breakpoint?
-  //   const breakpoints = this._breakPoints.get(this._sourceFile);
-  //   if (breakpoints) {
-  //     const bps = breakpoints.filter((bp) => bp.line === ln);
-  //     if (bps.length > 0) {
-  //       // send 'stopped' event
-  //       this.sendEvent("stopOnBreakpoint");
-
-  //       // the following shows the use of 'breakpoint' events to update properties of a breakpoint in the UI
-  //       // if breakpoint is not yet verified, verify it now and send a 'breakpoint' update event
-  //       if (!bps[0].verified) {
-  //         bps[0].verified = true;
-  //         this.sendEvent("breakpointValidated", bps[0]);
-  //       }
-  //       return true;
-  //     }
-  //   }
-
-  //   // non-empty line
-  //   if (stepEvent && line.length > 0) {
-  //     this.sendEvent(stepEvent);
-  //     return true;
-  //   }
-
-  //   // nothing interesting found -> continue
-  //   return false;
-  // }
 
   private sendEvent(event: string, ...args: any[]) {
     setImmediate((_) => {
@@ -651,7 +491,7 @@ export class RDBRuntime extends EventEmitter {
    */
   private getBreakpointsAsSqlValues(): string {
     if (this._breakPoints.size === 0) {
-      return `'', ''`;
+      return `('', -1)`;
     }
     return Array.from(this._breakPoints.entries())
       .map(([filename, breakpoints]) =>
