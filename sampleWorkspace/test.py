@@ -1,5 +1,6 @@
 from goet.tracer.sql import SqlTracer
 from goet.lib.db.sqlite import connection
+from helpers import add
 
 
 class A:
@@ -11,11 +12,12 @@ class A:
 
 
 def fn():
-    a = A(1)
-    # fn2()
-    a = 1 + 1
-    b = a + 1
-    return b
+    A(1)
+    a = add(1, 2)
+    b = 1 + 1
+    c = a + b
+    # comment
+    return c
 
 
 def fn2():

@@ -47,7 +47,7 @@ class GoetFrame {
     return {
       index: this.fId,
       name: `${this.fFuncname} (${this.fLineno})`,
-      file: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+      file: this.fFilename,
       line: this.fLineno,
     };
   }
