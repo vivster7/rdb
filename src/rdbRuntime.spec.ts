@@ -35,6 +35,7 @@ var assert = require("assert");
 
 const testDB = "/Users/vivek/Code/rdb/tests/data/test1.sqlite3";
 const testFile = "/Users/vivek/Code/rdb/sampleWorkspace/test.py";
+const helpersFile = "/Users/vivek/Code/rdb/sampleWorkspace/helpers.py";
 
 describe("RDBRuntime", async () => {
   let runtime: RDBRuntime;
@@ -175,5 +176,15 @@ describe("RDBRuntime", async () => {
       frames: [{ line }],
     } = await runtime.stack();
     assert.deepEqual(line, 29);
+  });
+
+  it("can follow imports", async () => {
+    await runtime.setBreakPoint(helpersFile, 2);
+    await runtime.continue();
+    const {
+      frames: [{ file, line }],
+    } = await runtime.stack();
+    assert.deepEqual(file, helpersFile);
+    assert.deepEqual(line, 2);
   });
 });
