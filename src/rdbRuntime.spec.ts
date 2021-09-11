@@ -126,6 +126,17 @@ describe("RDBRuntime", async () => {
     ]);
   });
 
+  it("evaluate", async () => {
+    await runtime.setBreakPoint(testFile, 18);
+    await runtime.continue();
+
+    assert.deepEqual(await runtime.evaluate("a"), "3");
+    assert.deepEqual(await runtime.evaluate("c"), "");
+
+    // `add` is defined in parent frame
+    assert.deepEqual(await runtime.evaluate("add"), "<function add>");
+  });
+
   it("reverseContinue", async () => {
     await runtime.setBreakPoint(testFile, 15);
     await runtime.setBreakPoint(testFile, 18);

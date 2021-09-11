@@ -29,15 +29,6 @@ class GoetFrame {
       row.f_lineno
     );
   }
-
-  // toStackFrame(): IStackFrame {
-  //   return {
-  //     index: this.fId,
-  //     name: `${this.fFuncname} (${this.fLineno})`,
-  //     file: this.fFilename,
-  //     line: this.fLineno,
-  //   };
-  // }
 }
 
 /**
@@ -61,11 +52,6 @@ export class RDBRuntime extends EventEmitter {
   private _breakpointId = 1;
 
   private _breakAddresses = new Set<string>();
-
-  // private _noDebug = false;
-
-  // private _namedException: string | undefined;
-  // private _otherExceptions = false;
 
   // TODO: figure out where to initialize this.
   private _db: Database = null as unknown as Database;
@@ -368,11 +354,6 @@ export class RDBRuntime extends EventEmitter {
     });
     const frames = [this._frame, ...rows.map(GoetFrame.fromRow)];
     return frames;
-
-    // return {
-    //   frames: frames.map((f) => f.toStackFrame()),
-    //   count: frames.length,
-    // };
   }
 
   public async evaluate(
@@ -391,28 +372,9 @@ export class RDBRuntime extends EventEmitter {
       if (oldFrameId) {
         this.jumpToFrame(oldFrameId);
       }
+      return get(frame?.fLocals, expression) ?? "";
     }
-    return get(frame?.fLocals, expression) ?? "";
   }
-
-  // public getBreakpoints(path: string, line: number): number[] {
-  //   const l = this._sourceLines[line];
-
-  //   let sawSpace = true;
-  //   const bps: number[] = [];
-  //   for (let i = 0; i < l.length; i++) {
-  //     if (l[i] !== " ") {
-  //       if (sawSpace) {
-  //         bps.push(i);
-  //         sawSpace = false;
-  //       }
-  //     } else {
-  //       sawSpace = true;
-  //     }
-  //   }
-
-  //   return bps;
-  // }
 
   /*
    * Set breakpoint in file with given line.
