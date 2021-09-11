@@ -32,6 +32,7 @@
   "dependencies": {
     "@types/sqlite3": "^3.1.7",
     "await-notify": "1.0.1",
+    "lodash.get": "^4.4.2",
     "sqlite": "^4.0.23",
     "sqlite3": "^5.0.2",
     "vscode-debugadapter": "^1.47.0"

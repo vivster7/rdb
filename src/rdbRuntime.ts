@@ -2,24 +2,11 @@ import { EventEmitter } from "events";
 import { Database as sql3Driver } from "sqlite3";
 import { Database, open } from "sqlite";
 import { Handles, Scope, Variable } from "vscode-debugadapter";
-
+import get from "lodash.get";
 export interface IRDBBreakpoint {
   id: number;
   line: number;
   verified: boolean;
-}
-
-interface IStackFrame {
-  index: number;
-  name: string;
-  file: string;
-  line: number;
-  column?: number;
-}
-
-interface IStack {
-  count: number;
-  frames: IStackFrame[];
 }
 
 class GoetFrame {
@@ -43,14 +30,14 @@ class GoetFrame {
     );
   }
 
-  toStackFrame(): IStackFrame {
-    return {
-      index: this.fId,
-      name: `${this.fFuncname} (${this.fLineno})`,
-      file: this.fFilename,
-      line: this.fLineno,
-    };
-  }
+  // toStackFrame(): IStackFrame {
+  //   return {
+  //     index: this.fId,
+  //     name: `${this.fFuncname} (${this.fLineno})`,
+  //     file: this.fFilename,
+  //     line: this.fLineno,
+  //   };
+  // }
 }
 
 /**
@@ -152,7 +139,7 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const getNextFrameIdByContinueSql = `
+    const getNextFrameIdByReverseContinueSql = `
       WITH 
         breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
         backward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id < $fId),
@@ -166,7 +153,7 @@ export class RDBRuntime extends EventEmitter {
       LIMIT 1
     `;
 
-    const row = await this._db.get(getNextFrameIdByContinueSql, {
+    const row = await this._db.get(getNextFrameIdByReverseContinueSql, {
       $fId: this._frame.fId,
     });
 
@@ -237,7 +224,7 @@ export class RDBRuntime extends EventEmitter {
       return;
     }
 
-    const getPrevFrameIdByStepSql = `
+    const getPrevFrameIdByStepBackSql = `
       WITH 
         breakpoints(filename, lineno) AS (VALUES ${this.getBreakpointsAsSqlValues()}),
         backward_frames(f_id, f_filename, f_lineno, f_back_id) AS (SELECT f_id, f_filename, f_lineno, f_back_id FROM frames WHERE f_id < $fId)
@@ -251,7 +238,7 @@ export class RDBRuntime extends EventEmitter {
       LIMIT 1
     `;
 
-    const row = await this._db.get(getPrevFrameIdByStepSql, {
+    const row = await this._db.get(getPrevFrameIdByStepBackSql, {
       $fId: this._frame.fId,
       $fBackId: this._frame.fBackId ?? 0,
     });
@@ -326,8 +313,9 @@ export class RDBRuntime extends EventEmitter {
 
   public async scopes(frameId: number): Promise<Scope[]> {
     const getFrameByIdSql = `
-    SELECT * FROM frames
-    WHERE f_id = $fId`;
+      SELECT * FROM frames
+      WHERE f_id = $fId
+    `;
 
     const row = await this._db.get(getFrameByIdSql, {
       $fId: frameId,
@@ -357,37 +345,54 @@ export class RDBRuntime extends EventEmitter {
     });
   }
 
-  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
-  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
-  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
-  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
-  // TODO: ADD FUNCTION NAME TO FRAME `f_code.co_name`
-
-  public async stack(): Promise<IStack> {
+  public async stack(): Promise<GoetFrame[]> {
     if (!this._frame) {
-      return { frames: [], count: 0 };
+      return [];
     }
 
     const stacktraceSql = `
-    WITH RECURSIVE
-    stacktrace(f) AS (
-        VALUES($fBackId)
-        UNION ALL
-        SELECT f_back_id FROM frames, stacktrace
-        WHERE frames.f_id = stacktrace.f
-    )
-    SELECT * FROM frames
-    WHERE f_id IN stacktrace
-    ORDER BY f_back_ID DESC;`;
+      WITH RECURSIVE
+      stacktrace(f) AS (
+          VALUES($fBackId)
+          UNION ALL
+          SELECT f_back_id FROM frames, stacktrace
+          WHERE frames.f_id = stacktrace.f
+      )
+      SELECT * FROM frames
+      WHERE f_id IN stacktrace
+      ORDER BY f_back_ID DESC;
+    `;
 
     const rows = await this._db.all(stacktraceSql, {
       $fBackId: this._frame.fBackId ?? 0,
     });
     const frames = [this._frame, ...rows.map(GoetFrame.fromRow)];
-    return {
-      frames: frames.map((f) => f.toStackFrame()),
-      count: frames.length,
-    };
+    return frames;
+
+    // return {
+    //   frames: frames.map((f) => f.toStackFrame()),
+    //   count: frames.length,
+    // };
+  }
+
+  public async evaluate(
+    expression: string,
+    frameId: number = 1 // uses global frame by default
+  ): Promise<string> {
+    const oldFrameId = this._frame?.fId;
+    let frame: GoetFrame | undefined;
+
+    try {
+      this.jumpToFrame(frameId);
+      frame = (await this.stack()).find(
+        (f) => get(f.fLocals, expression) !== undefined
+      );
+    } finally {
+      if (oldFrameId) {
+        this.jumpToFrame(oldFrameId);
+      }
+    }
+    return get(frame?.fLocals, expression) ?? "";
   }
 
   // public getBreakpoints(path: string, line: number): number[] {
@@ -459,6 +464,9 @@ export class RDBRuntime extends EventEmitter {
 
   /*
    * Set data breakpoint.
+  TODO: MAKE THIS DATA BREAKPOINTS WORK
+  TODO: MAKE THIS DATA BREAKPOINTS WORK
+  TODO: MAKE THIS DATA BREAKPOINTS WORK
    */
   public setDataBreakpoint(address: string): boolean {
     if (address) {

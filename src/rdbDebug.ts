@@ -5,11 +5,7 @@ import {
   InitializedEvent,
   TerminatedEvent,
   StoppedEvent,
-  BreakpointEvent,
   OutputEvent,
-  ProgressStartEvent,
-  ProgressUpdateEvent,
-  ProgressEndEvent,
   Thread,
   StackFrame,
   Source,
@@ -22,9 +18,9 @@ import { RDBRuntime } from "./RDBRuntime";
 import { FileAccessor } from "./FileAccessor";
 import { Subject } from "await-notify";
 
-function timeout(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// function timeout(ms: number) {
+//   return new Promise((resolve) => setTimeout(resolve, ms));
+// }
 
 /**
  * This interface describes the rdb-debug specific launch attributes
@@ -57,10 +53,10 @@ export class RDBDebugSession extends LoggingDebugSession {
   private _cancelationTokens = new Map<number, boolean>();
   // private _isLongrunning = new Map<number, boolean>();
 
-  private _reportProgress = false;
-  private _progressId = 10000;
-  private _cancelledProgressId: string | undefined = undefined;
-  private _isProgressCancellable = true;
+  // private _reportProgress = false;
+  // private _progressId = 10000;
+  // private _cancelledProgressId: string | undefined = undefined;
+  // private _isProgressCancellable = true;
 
   /**
    * Creates a new debug adapter that is used for one debug session.
@@ -128,9 +124,9 @@ export class RDBDebugSession extends LoggingDebugSession {
     response: DebugProtocol.InitializeResponse,
     args: DebugProtocol.InitializeRequestArguments
   ): void {
-    if (args.supportsProgressReporting) {
-      this._reportProgress = true;
-    }
+    // if (args.supportsProgressReporting) {
+    //   this._reportProgress = true;
+    // }
 
     // build and return the capabilities of this debug adapter:
     response.body = response.body || {};
@@ -337,20 +333,20 @@ export class RDBDebugSession extends LoggingDebugSession {
     const stk = await this._runtime.stack();
 
     response.body = {
-      stackFrames: stk.frames.map((f) => {
+      stackFrames: stk.map((f) => {
         const sf = new StackFrame(
-          f.index,
-          f.name,
-          this.createSource(f.file),
-          this.convertDebuggerLineToClient(f.line)
+          f.fId,
+          `${f.fFuncname} (${f.fLineno})`,
+          this.createSource(f.fFilename),
+          this.convertDebuggerLineToClient(f.fLineno)
         );
-        if (typeof f.column === "number") {
-          sf.column = this.convertDebuggerColumnToClient(f.column);
-        }
+        // if (typeof f.column === "number") {
+        //   sf.column = this.convertDebuggerColumnToClient(f.column);
+        // }
         return sf;
       }),
       //no totalFrames: 				// VS Code has to probe/guess. Should result in a max. of two requests
-      totalFrames: stk.count, // stk.count is the correct size, should result in a max. of two requests
+      totalFrames: stk.length, // stk.count is the correct size, should result in a max. of two requests
       //totalFrames: 1000000 			// not the correct size, should result in a max. of two requests
       //totalFrames: endFrame + 20 	// dynamically increases the size with every requested chunk, results in paging
     };
@@ -431,99 +427,107 @@ export class RDBDebugSession extends LoggingDebugSession {
     this.sendResponse(response);
   }
 
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
+  // TODO: Make evaluate request work for 'hover' and 'watch' (not 'repl' and 'clipboard')
   protected async evaluateRequest(
     response: DebugProtocol.EvaluateResponse,
     args: DebugProtocol.EvaluateArguments
   ): Promise<void> {
-    let reply: string | undefined = undefined;
+    const result = await this._runtime.evaluate(args.expression, args.frameId);
 
-    if (args.context === "repl") {
-      // 'evaluate' supports to create and delete breakpoints from the 'repl':
-      const matches = /new +([0-9]+)/.exec(args.expression);
-      if (matches && matches.length === 2) {
-        const mbp = await this._runtime.setBreakPoint(
-          this._runtime.sourceFile,
-          this.convertClientLineToDebugger(parseInt(matches[1]))
-        );
-        const bp = new Breakpoint(
-          mbp.verified,
-          this.convertDebuggerLineToClient(mbp.line),
-          undefined,
-          this.createSource(this._runtime.sourceFile)
-        ) as DebugProtocol.Breakpoint;
-        bp.id = mbp.id;
-        this.sendEvent(new BreakpointEvent("new", bp));
-        reply = `breakpoint created`;
-      } else {
-        const matches = /del +([0-9]+)/.exec(args.expression);
-        if (matches && matches.length === 2) {
-          const mbp = this._runtime.clearBreakPoint(
-            this._runtime.sourceFile,
-            this.convertClientLineToDebugger(parseInt(matches[1]))
-          );
-          if (mbp) {
-            const bp = new Breakpoint(false) as DebugProtocol.Breakpoint;
-            bp.id = mbp.id;
-            this.sendEvent(new BreakpointEvent("removed", bp));
-            reply = `breakpoint deleted`;
-          }
-        } else {
-          const matches = /progress/.exec(args.expression);
-          if (matches && matches.length === 1) {
-            if (this._reportProgress) {
-              reply = `progress started`;
-              this.progressSequence();
-            } else {
-              reply = `frontend doesn't support progress (capability 'supportsProgressReporting' not set)`;
-            }
-          }
-        }
-      }
-    }
+    // if (args.context === "repl") {
+    //   // 'evaluate' supports to create and delete breakpoints from the 'repl':
+    //   const matches = /new +([0-9]+)/.exec(args.expression);
+    //   if (matches && matches.length === 2) {
+    //     const mbp = await this._runtime.setBreakPoint(
+    //       this._runtime.sourceFile,
+    //       this.convertClientLineToDebugger(parseInt(matches[1]))
+    //     );
+    //     const bp = new Breakpoint(
+    //       mbp.verified,
+    //       this.convertDebuggerLineToClient(mbp.line),
+    //       undefined,
+    //       this.createSource(this._runtime.sourceFile)
+    //     ) as DebugProtocol.Breakpoint;
+    //     bp.id = mbp.id;
+    //     this.sendEvent(new BreakpointEvent("new", bp));
+    //     reply = `breakpoint created`;
+    //   } else {
+    //     const matches = /del +([0-9]+)/.exec(args.expression);
+    //     if (matches && matches.length === 2) {
+    //       const mbp = this._runtime.clearBreakPoint(
+    //         this._runtime.sourceFile,
+    //         this.convertClientLineToDebugger(parseInt(matches[1]))
+    //       );
+    //       if (mbp) {
+    //         const bp = new Breakpoint(false) as DebugProtocol.Breakpoint;
+    //         bp.id = mbp.id;
+    //         this.sendEvent(new BreakpointEvent("removed", bp));
+    //         reply = `breakpoint deleted`;
+    //       }
+    //     } else {
+    //       const matches = /progress/.exec(args.expression);
+    //       if (matches && matches.length === 1) {
+    //         if (this._reportProgress) {
+    //           reply = `progress started`;
+    //           this.progressSequence();
+    //         } else {
+    //           reply = `frontend doesn't support progress (capability 'supportsProgressReporting' not set)`;
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
 
     response.body = {
-      result: reply
-        ? reply
-        : `evaluate(context: '${args.context}', '${args.expression}')`,
+      result,
+      // : reply
+      //   ? reply
+      //   : `evaluate(context: '${args.context}', '${args.expression}')`,
       variablesReference: 0,
     };
     this.sendResponse(response);
   }
 
-  private async progressSequence() {
-    const ID = "" + this._progressId++;
+  // private async progressSequence() {
+  //   const ID = "" + this._progressId++;
 
-    await timeout(100);
+  //   await timeout(100);
 
-    const title = this._isProgressCancellable
-      ? "Cancellable operation"
-      : "Long running operation";
-    const startEvent: DebugProtocol.ProgressStartEvent = new ProgressStartEvent(
-      ID,
-      title
-    );
-    startEvent.body.cancellable = this._isProgressCancellable;
-    this._isProgressCancellable = !this._isProgressCancellable;
-    this.sendEvent(startEvent);
-    this.sendEvent(new OutputEvent(`start progress: ${ID}\n`));
+  //   const title = this._isProgressCancellable
+  //     ? "Cancellable operation"
+  //     : "Long running operation";
+  //   const startEvent: DebugProtocol.ProgressStartEvent = new ProgressStartEvent(
+  //     ID,
+  //     title
+  //   );
+  //   startEvent.body.cancellable = this._isProgressCancellable;
+  //   this._isProgressCancellable = !this._isProgressCancellable;
+  //   this.sendEvent(startEvent);
+  //   this.sendEvent(new OutputEvent(`start progress: ${ID}\n`));
 
-    let endMessage = "progress ended";
+  //   let endMessage = "progress ended";
 
-    for (let i = 0; i < 100; i++) {
-      await timeout(500);
-      this.sendEvent(new ProgressUpdateEvent(ID, `progress: ${i}`));
-      if (this._cancelledProgressId === ID) {
-        endMessage = "progress cancelled";
-        this._cancelledProgressId = undefined;
-        this.sendEvent(new OutputEvent(`cancel progress: ${ID}\n`));
-        break;
-      }
-    }
-    this.sendEvent(new ProgressEndEvent(ID, endMessage));
-    this.sendEvent(new OutputEvent(`end progress: ${ID}\n`));
+  //   for (let i = 0; i < 100; i++) {
+  //     await timeout(500);
+  //     this.sendEvent(new ProgressUpdateEvent(ID, `progress: ${i}`));
+  //     if (this._cancelledProgressId === ID) {
+  //       endMessage = "progress cancelled";
+  //       this._cancelledProgressId = undefined;
+  //       this.sendEvent(new OutputEvent(`cancel progress: ${ID}\n`));
+  //       break;
+  //     }
+  //   }
+  //   this.sendEvent(new ProgressEndEvent(ID, endMessage));
+  //   this.sendEvent(new OutputEvent(`end progress: ${ID}\n`));
 
-    this._cancelledProgressId = undefined;
-  }
+  //   this._cancelledProgressId = undefined;
+  // }
 
   protected dataBreakpointInfoRequest(
     response: DebugProtocol.DataBreakpointInfoResponse,
@@ -619,9 +623,9 @@ export class RDBDebugSession extends LoggingDebugSession {
     if (args.requestId) {
       this._cancelationTokens.set(args.requestId, true);
     }
-    if (args.progressId) {
-      this._cancelledProgressId = args.progressId;
-    }
+    // if (args.progressId) {
+    //   this._cancelledProgressId = args.progressId;
+    // }
   }
 
   //

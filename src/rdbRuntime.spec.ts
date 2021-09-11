@@ -46,29 +46,23 @@ describe("RDBRuntime", async () => {
   });
 
   it("starts on the first line", async () => {
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 29);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 29);
   });
 
   it("continue", async () => {
     await runtime.setBreakPoint(testFile, 8);
     await runtime.continue();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 8);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 8);
   });
 
   it("has a locals scope + variables", async () => {
     await runtime.setBreakPoint(testFile, 8);
     await runtime.continue();
-    const {
-      frames: [topFrame],
-    } = await runtime.stack();
-    assert.deepEqual(topFrame.line, 8);
-    const [scope] = await runtime.scopes(topFrame.index);
+    const [topFrame] = await runtime.stack();
+    assert.deepEqual(topFrame.fLineno, 8);
+    const [scope] = await runtime.scopes(topFrame.fId);
     const [var1, var2] = await runtime.variables(scope.variablesReference);
     assert.deepEqual(var1.name, "self");
     assert.deepEqual(var1.value, "{}");
@@ -79,26 +73,55 @@ describe("RDBRuntime", async () => {
   it("stack", async () => {
     await runtime.setBreakPoint(testFile, 8);
     await runtime.continue();
-    const { frames, count } = await runtime.stack();
-    assert.deepEqual(count, 3);
+    const frames = await runtime.stack();
+    assert.deepEqual(frames.length, 3);
     assert.deepEqual(frames, [
       {
-        file: testFile,
-        index: 3,
-        line: 8,
-        name: "__init__ (8)",
+        fBackId: 2,
+        fFilename: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+        fFuncname: "__init__",
+        fId: 3,
+        fLineno: 8,
+        fLocals: {
+          self: {},
+          x: 1,
+        },
       },
       {
-        file: testFile,
-        index: 2,
-        line: 15,
-        name: "fn (15)",
+        fBackId: 1,
+        fFilename: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+        fFuncname: "fn",
+        fId: 2,
+        fLineno: 15,
+        fLocals: {},
       },
       {
-        file: testFile,
-        index: 1,
-        line: 29,
-        name: "<module> (29)",
+        fBackId: null,
+        fFilename: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+        fFuncname: "<module>",
+        fId: 1,
+        fLineno: 29,
+        fLocals: {
+          A: "<class '__main__.A'>",
+          SqlTracer: "<class 'goet.tracer.sql.SqlTracer'>",
+          __annotations__: {},
+          __builtins__: "<module 'builtins' (built-in)>",
+          __cached__: null,
+          __doc__: null,
+          __file__: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+          __loader__: {
+            name: "__main__",
+            path: "/Users/vivek/Code/rdb/sampleWorkspace/test.py",
+          },
+          __name__: "__main__",
+          __package__: null,
+          __spec__: null,
+          add: "<function add>",
+          connection: {},
+          fn: "<function fn>",
+          fn2: "<function fn2>",
+          t: null,
+        },
       },
     ]);
   });
@@ -109,20 +132,16 @@ describe("RDBRuntime", async () => {
     await runtime.continue();
     await runtime.continue();
     await runtime.reverseContinue();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 15);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 15);
   });
 
   it("step", async () => {
     await runtime.setBreakPoint(testFile, 15);
     await runtime.continue();
     await runtime.step();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 16);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 16);
   });
 
   it("step stops at next breakpoint", async () => {
@@ -131,21 +150,17 @@ describe("RDBRuntime", async () => {
     await runtime.setBreakPoint(testFile, 8);
     await runtime.step();
 
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
+    const [{ fLineno }] = await runtime.stack();
     // stops at breakpoint, not next step line (16)
-    assert.deepEqual(line, 8);
+    assert.deepEqual(fLineno, 8);
   });
 
   it("stepBack", async () => {
     await runtime.setBreakPoint(testFile, 16);
     await runtime.continue();
     await runtime.stepBack();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 15);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 15);
   });
 
   it("stepBack stops at next breakpoint", async () => {
@@ -154,37 +169,29 @@ describe("RDBRuntime", async () => {
     await runtime.setBreakPoint(testFile, 8);
     await runtime.stepBack();
 
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
+    const [{ fLineno }] = await runtime.stack();
     // stops at breakpoint, not next step line (14)
-    assert.deepEqual(line, 8);
+    assert.deepEqual(fLineno, 8);
   });
 
   it("stepIn", async () => {
     await runtime.stepIn();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 15);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 15);
   });
 
   it("stepOut", async () => {
     await runtime.stepIn();
     await runtime.stepOut();
-    const {
-      frames: [{ line }],
-    } = await runtime.stack();
-    assert.deepEqual(line, 29);
+    const [{ fLineno }] = await runtime.stack();
+    assert.deepEqual(fLineno, 29);
   });
 
   it("can follow imports", async () => {
     await runtime.setBreakPoint(helpersFile, 2);
     await runtime.continue();
-    const {
-      frames: [{ file, line }],
-    } = await runtime.stack();
-    assert.deepEqual(file, helpersFile);
-    assert.deepEqual(line, 2);
+    const [{ fFilename, fLineno }] = await runtime.stack();
+    assert.deepEqual(fFilename, helpersFile);
+    assert.deepEqual(fLineno, 2);
   });
 });
